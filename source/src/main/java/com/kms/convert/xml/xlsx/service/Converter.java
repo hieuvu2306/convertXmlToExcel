@@ -17,46 +17,97 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.kms.convert.xml.xlsx.model.TestCase;
 import com.kms.convert.xml.xlsx.model.TestSuite;
 
 public class Converter {
 
-    private static final String TESTCASES_SHEET_NAME = "TestCases";
+    private static final Logger LOG = LoggerFactory.getLogger(Converter.class);
+    private static final String EXCEL_EXTENSION_NAME = ".xlsx";
+    private static final String TESTCASES_SHEET_NAME = "Test Cases";
     private static final int HEADER_ROW_NUMBER = 0;
     private static final int HEADER_CELL_NUMBER = 0;
     private static final int DATA_ROW_NUMBER = 1;
     private static final int DATA_CELL_NUMBER = 0;
+    private static final int REPORT_FILE_NAME_POSITION = 0;
+    int rowNumber = 0;
+    int cellNumber = 0;
 
-    public void writeToXLSXFile(String xmlFilePath, String reportFilePath) throws IOException {
+    public void writeToXLSXFile(String xmlFilePath, String reportFilePath) {
+        File file = new File(xmlFilePath);
+        String excelFileName = "/" + file.getName().split(".xml")[REPORT_FILE_NAME_POSITION];
 
         TestSuite testSuite = convertXmlToTestSuite(xmlFilePath);
-        List<TestSuite> testSuiteSamples = getTestSuiteSimples(testSuite);
+        List<TestSuite> testSuites = getTestSuites(testSuite);
         XSSFWorkbook workbook = new XSSFWorkbook();
-        XSSFSheet sheet = workbook.createSheet(TESTCASES_SHEET_NAME);
+        XSSFSheet testCasesSheet = workbook.createSheet(TESTCASES_SHEET_NAME);
 
+        createTestCasesSheet(testSuites, testCasesSheet);
+
+        FileOutputStream fileOut;
+        try {
+            fileOut = new FileOutputStream(reportFilePath + excelFileName + EXCEL_EXTENSION_NAME);
+            workbook.write(fileOut);
+            LOG.info("Convert from xml file to excel file successfull!");
+            workbook.close();
+            fileOut.flush();
+            fileOut.close();
+        } catch (IOException e) {
+            LOG.error("Wrong excel file path, error message : " + e.getMessage());
+        }
+
+    }
+
+    private void createTestCasesSheet(List<TestSuite> testSuites, XSSFSheet testCasesSheet) {
         Map<String, Object[]> header = new TreeMap<String, Object[]>();
-        Map<Long, Object[]> data = new TreeMap<Long, Object[]>();
         header.put("header",
                 new Object[] { "Internal Id", "Name", "Node Order", "Extermal Id", "Version", "Summary",
-                        "Preconditions", "Execution Type", "Importance", "Test Suite Name", "Step Number",
+                        "Preconditions", "Execution Type", "Importance", "Key Words", "Test Suite Name", "Step Number",
                         "Step Action", "Expected Results" });
 
+        Map<Long, Object[]> testCasesData = new TreeMap<Long, Object[]>();
+        testCasesData = createTestCasesDataMap(testSuites);
+        int headerRowNum = HEADER_ROW_NUMBER;
+        Row headerRow = testCasesSheet.createRow(headerRowNum++);
+        Object[] headerColumnNames = header.get("header");
+        int headerCellNum = HEADER_CELL_NUMBER;
+        for (Object obj : headerColumnNames) {
+            Cell cell = headerRow.createCell(headerCellNum++);
+            cell.setCellValue((String) obj);
+        }
+
+        Set<Long> keyset = testCasesData.keySet();
+        int dataRowNum = DATA_ROW_NUMBER;
+        for (Long keys : keyset) {
+            Row row = testCasesSheet.createRow(dataRowNum++);
+            Object[] objArr = testCasesData.get(keys);
+            int dataCellNum = DATA_CELL_NUMBER;
+            for (Object obj : objArr) {
+                Cell cell = row.createCell(dataCellNum++);
+                cell.setCellValue((String) obj);
+            }
+        }
+    }
+
+    private Map<Long, Object[]> createTestCasesDataMap(List<TestSuite> testSuites) {
+        Map<Long, Object[]> data = new TreeMap<Long, Object[]>();
         Long dataKey = 1L;
-        for (int i = 0; i < testSuiteSamples.size(); i++) {
-            TestSuite testSuiteSimple = testSuiteSamples.get(i);
-            for (int j = 0; j < testSuiteSimple.getTestCases().size(); j++) {
-                TestCase testCase = testSuiteSimple.getTestCases().get(j);
+        for (int i = 0; i < testSuites.size(); i++) {
+            TestSuite testSuite = testSuites.get(i);
+            for (int j = 0; j < testSuite.getTestCases().size(); j++) {
+                TestCase testCase = testSuite.getTestCases().get(j);
                 int stepInTestCaseCount = testCase.getSteps().size();
-                if (stepInTestCaseCount >= 1) {
+                if (stepInTestCaseCount > 0) {
                     for (int k = 0; k < stepInTestCaseCount; k++) {
                         data.put(dataKey++,
                                 new Object[] { testCase.getInternalId().toString(), testCase.getName(),
                                         testCase.getNodeOrder().toString(), testCase.getExternalId().toString(),
                                         testCase.getVersion().toString(), testCase.getSummary(),
                                         testCase.getPreconditions(), testCase.getExecutionType().toString(),
-                                        testCase.getImportance().toString(), testSuiteSimple.getName(),
+                                        testCase.getImportance().toString(), getKeyWords(testCase), testSuite.getPath(),
                                         testCase.getSteps().get(k).getStepNumber().toString(),
                                         testCase.getSteps().get(k).getActions(),
                                         testCase.getSteps().get(k).getExpectedResults() });
@@ -67,56 +118,62 @@ public class Converter {
                                     testCase.getNodeOrder().toString(), testCase.getExternalId().toString(),
                                     testCase.getVersion().toString(), testCase.getSummary(),
                                     testCase.getPreconditions(), testCase.getExecutionType().toString(),
-                                    testCase.getImportance().toString(), testSuiteSimple.getName(), "", "", "" });
+                                    testCase.getImportance().toString(), getKeyWords(testCase), testSuite.getPath(), "",
+                                    "", "" });
                 }
             }
         }
-        int headerRowNum = HEADER_ROW_NUMBER;
-        Row headerRow = sheet.createRow(headerRowNum++);
-        Object[] headerColumnNames = header.get("header");
-        int headerCellNum = HEADER_CELL_NUMBER;
-        for (Object obj : headerColumnNames) {
-            Cell cell = headerRow.createCell(headerCellNum++);
-            cell.setCellValue((String) obj);
-        }
+        return data;
+    }
 
-        Set<Long> keyset = data.keySet();
-        int dataRowNum = DATA_ROW_NUMBER;
-        for (Long keys : keyset) {
-            Row row = sheet.createRow(dataRowNum++);
-            Object[] objArr = data.get(keys);
-            int dataCellNum = DATA_CELL_NUMBER;
-            for (Object obj : objArr) {
-                Cell cell = row.createCell(dataCellNum++);
-                cell.setCellValue((String) obj);
+    private String getKeyWords(TestCase testCase) {
+        int keyWordsCount = testCase.getKeyWords().size();
+        String keyWords = "";
+        if (keyWordsCount > 0) {
+            for (int i = 0; i < keyWordsCount; i++) {
+                keyWords += testCase.getKeyWords().get(i).getName() + ",";
             }
         }
-
-        FileOutputStream fileOut = new FileOutputStream(reportFilePath);
-
-        workbook.write(fileOut);
-        workbook.close();
-        fileOut.flush();
-        fileOut.close();
+        return keyWords;
     }
 
-    /**
-     * This method to get testSuite simples have only testCases and name
-     */
-    public List<TestSuite> getTestSuiteSimples(TestSuite testSuite) {
-        List<TestSuite> testSuiteSimples = new ArrayList<TestSuite>();
-        if (testSuite.getTestSuites().isEmpty()) {
-            testSuiteSimples.add(testSuite);
-            return testSuiteSimples;
+    private List<TestSuite> getTestSuites(TestSuite testSuite) {
+        List<TestSuite> testSuitesWithPath = createTestSuitesWithPath(testSuite);
+        List<TestSuite> testSuites = new ArrayList<>();
+        for (TestSuite testSuiteTemp : testSuitesWithPath) {
+            if ((!testSuiteTemp.getTestCases().isEmpty() && !testSuiteTemp.getTestSuites().isEmpty())) {
+                testSuites.add(testSuiteTemp);
+            }
+            if (testSuiteTemp.getTestSuites().isEmpty()) {
+                testSuites.add(testSuiteTemp);
+            }
         }
-        for (TestSuite testSuiteTemp : testSuite.getTestSuites()) {
-            testSuiteSimples.addAll(getTestSuiteSimples(testSuiteTemp));
-        }
-        return testSuiteSimples;
+        return testSuites;
     }
 
-    public TestSuite convertXmlToTestSuite(String filePath) {
-        File xmlFile = new File(filePath);
+    private List<TestSuite> createTestSuitesWithPath(TestSuite testSuite) {
+        List<TestSuite> testSuites = new ArrayList<>();
+        testSuite.setPath(testSuite.getName());
+        testSuites.add(testSuite);
+        testSuites.addAll(getChild(testSuite));
+        return testSuites;
+    }
+
+    private List<TestSuite> getChild(TestSuite testSuite) {
+        List<TestSuite> testSuites = new ArrayList<>();
+        int testSuitesChildCount = testSuite.getTestSuites().size();
+        if (testSuitesChildCount > 0) {
+            for (TestSuite testSuiteChild : testSuite.getTestSuites()) {
+                testSuiteChild.setPath(testSuite.getPath() + "\\" + testSuiteChild.getName());
+                testSuites.add(testSuiteChild);
+                testSuites.addAll(getChild(testSuiteChild));
+            }
+        }
+        return testSuites;
+    }
+
+    public TestSuite convertXmlToTestSuite(String xmlFilePath) {
+        File xmlFile = new File(xmlFilePath);
         JAXBContext jaxbContext;
         TestSuite testSuite = new TestSuite();
         try {
@@ -124,7 +181,7 @@ public class Converter {
             Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
             testSuite = (TestSuite) jaxbUnmarshaller.unmarshal(xmlFile);
         } catch (JAXBException e) {
-            e.printStackTrace();
+            LOG.error("Can't parse from XML file to Object , error message : " + e.getMessage());
         }
         return testSuite;
     }

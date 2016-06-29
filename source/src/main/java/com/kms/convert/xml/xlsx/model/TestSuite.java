@@ -22,6 +22,8 @@ public class TestSuite {
     @XmlElement(name = "testsuite")
     private List<TestSuite> testSuites = new ArrayList<TestSuite>();
 
+    private String path;
+
     public List<TestCase> getTestCases() {
         return testCases;
     }
@@ -44,6 +46,14 @@ public class TestSuite {
 
     public void setTestSuites(List<TestSuite> testSuites) {
         this.testSuites = testSuites;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
     }
 
 }

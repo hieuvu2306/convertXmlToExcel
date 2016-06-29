@@ -21,6 +21,7 @@ public class TestCase {
     private Long executionType;
     private Long importance;
     private List<Step> steps = new ArrayList<Step>();
+    private List<KeyWord> keyWords = new ArrayList<>();
 
     @XmlAttribute(name = "internalid")
     public Long getInternalId() {
@@ -111,6 +112,16 @@ public class TestCase {
 
     public void setSteps(List<Step> steps) {
         this.steps = steps;
+    }
+
+    @XmlElementWrapper(name = "keywords")
+    @XmlElement(name = "keyword")
+    public List<KeyWord> getKeyWords() {
+        return keyWords;
+    }
+
+    public void setKeyWords(List<KeyWord> keyWords) {
+        this.keyWords = keyWords;
     }
 
 }
